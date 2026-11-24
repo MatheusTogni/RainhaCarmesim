@@ -48,7 +48,7 @@ Stack:
 6. Pede a permissão "instalar apps desconhecidos" **apenas** nesse momento.
 7. Abre o instalador oficial (`PackageInstaller`, com `FileProvider` como alternativa). A confirmação é sempre do usuário e os dados são preservados.
 
-As releases são publicadas automaticamente pelo workflow `build.yml` a cada push na `main`; veja [RELEASING.md](RELEASING.md).
+As releases são publicadas pelo workflow `build.yml` a cada push na `main` (release `latest`); veja [RELEASING.md](RELEASING.md).
 
 ## Permissões Android
 
@@ -84,4 +84,4 @@ O app não usa notificações do sistema, serviços em segundo plano nem WorkMan
 - Nenhuma senha, credencial ou dado pessoal é coletado. O backup automático está desativado e tudo fica no aparelho.
 - Todo tráfego HTTP é HTTPS (`cleartextTrafficPermitted=false`).
 - As entradas do usuário são validadas. O alvo do ping não pode começar com `-` e nunca passa por shell.
-- A chave de assinatura **não está no repositório**: fica nos GitHub Secrets e o CI recusa publicar uma release assinada com a chave de debug. Veja [RELEASING.md](RELEASING.md).
+- A chave de assinatura **não está no repositório**: fica nos GitHub Secrets e é usada pelo CI para assinar o APK. Veja [RELEASING.md](RELEASING.md).

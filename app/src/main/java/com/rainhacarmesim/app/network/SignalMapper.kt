@@ -126,7 +126,7 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
     fun clear() {
         grid.clear()
         segments.clear()
-        segments += mutableListOf(MapPoint(0f, 0f))
+        segments.add(mutableListOf(MapPoint(0f, 0f)))
         x = 0f; y = 0f; steps = 0; distance = 0f
         heading0 = headingRad
         _heading.value = 0f
@@ -143,8 +143,8 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
         x = nx; y = ny
         val last = segments.last()
         if (last.size <= 1) last.clear()
-        if (last.isNotEmpty()) segments += mutableListOf()
-        segments.last() += MapPoint(x, y)
+        if (last.isNotEmpty()) segments.add(mutableListOf())
+        segments.last().add(MapPoint(x, y))
         recordIfFresh()
         publish()
     }
@@ -171,7 +171,7 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
         y += stepLength * cos(rel)
         steps++
         distance += stepLength
-        segments.last() += MapPoint(x, y)
+        segments.last().add(MapPoint(x, y))
         recordIfFresh()
         publish()
     }
