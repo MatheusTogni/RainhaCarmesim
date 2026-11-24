@@ -1,0 +1,177 @@
+name: Release
+
+# Publica uma nova versão no GitHub Releases (APK + latest.json com SHA-256).
+# Dispara ao enviar uma tag vX.Y.Z, ou manualmente informando a versão.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão no formato X.Y.Z (ex.: 1.0.1)'
+        required: true
+      notes:
+        description: 'Notas da versão (opcional)'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Definir versão
+        id: ver
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            VERSION="${INPUT_VERSION#v}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]{1,2}\.[0-9]{1,2}$'; then
+            echo "::error::Versão inválida: '$VERSION' (use X.Y.Z, com Y e Z entre 0 e 99)"
+            exit 1
+          fi
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
+          TAG="v$VERSION"
+
+          if [ -n "$INPUT_NOTES" ]; then
+            NOTES="$INPUT_NOTES"
+          elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            NOTES=$(git tag -l --format='%(contents)' "$TAG" | sed '/^-----BEGIN PGP/,$d')
+            [ -z "$NOTES" ] && NOTES=$(git log -1 --format=%B "$TAG")
+          else
+            NOTES=$(git log -1 --format=%B)
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          printf '%s' "$NOTES" > release-notes.txt
+          echo "Versão $VERSION (versionCode $CODE)"
+
+      - name: Impedir versão repetida ou menor que a publicada
+        run: |
+          URL="https://github.com/$REPO/releases/latest/download/latest.json"
+          if curl -fsSL "$URL" -o current.json; then
+            CURRENT=$(jq -r '.versionCode' current.json)
+            echo "Versão publicada atualmente: $CURRENT"
+            if [ "${{ steps.ver.outputs.code }}" -le "$CURRENT" ]; then
+              echo "::error::versionCode ${{ steps.ver.outputs.code }} não é maior que o publicado ($CURRENT)."
+              exit 1
+            fi
+          else
+            echo "Nenhuma versão publicada ainda."
+          fi
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::A release ${{ steps.ver.outputs.tag }} já existe."
+            exit 1
+          fi
+
+      - name: Validar Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Preparar chave de assinatura
+        env:
+          RC_KEYSTORE_BASE64: ${{ secrets.RC_KEYSTORE_BASE64 }}
+          RC_KEYSTORE_PASSWORD: ${{ secrets.RC_KEYSTORE_PASSWORD }}
+          RC_KEY_ALIAS: ${{ secrets.RC_KEY_ALIAS }}
+          RC_KEY_PASSWORD: ${{ secrets.RC_KEY_PASSWORD }}
+        run: |
+          # Uma release NUNCA pode sair assinada com outra chave: sem os secrets, falha.
+          for v in RC_KEYSTORE_BASE64 RC_KEYSTORE_PASSWORD RC_KEY_ALIAS RC_KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret $v não configurado. Veja docs/RELEASING.md."
+              exit 1
+            fi
+          done
+          echo "$RC_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          {
+            echo "RC_KEYSTORE_PATH=$RUNNER_TEMP/release.p12"
+            echo "RC_KEYSTORE_PASSWORD=$RC_KEYSTORE_PASSWORD"
+            echo "RC_KEY_ALIAS=$RC_KEY_ALIAS"
+            echo "RC_KEY_PASSWORD=$RC_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Testar e compilar
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleRelease \
+            -PversionName=${{ steps.ver.outputs.version }} \
+            -PversionCode=${{ steps.ver.outputs.code }}
+
+      - name: Conferir assinatura do APK
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          CERT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -m1 'certificate DN')
+          echo "$CERT"
+          if echo "$CERT" | grep -q 'CN=Android Debug'; then
+            echo "::error::APK assinado com a chave de DEBUG. Abortando a publicação."
+            exit 1
+          fi
+
+      - name: Preparar APK, SHA-256 e latest.json
+        id: pkg
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          TAG=${{ steps.ver.outputs.tag }}
+          APK="RainhaCarmesim-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          jq -n \
+            --arg versionName "$VERSION" \
+            --argjson versionCode ${{ steps.ver.outputs.code }} \
+            --rawfile releaseNotes release-notes.txt \
+            --arg apkUrl "https://github.com/$REPO/releases/download/$TAG/$APK" \
+            --arg sha256 "$SHA" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{versionName: $versionName, versionCode: $versionCode, releaseNotes: $releaseNotes, apkUrl: $apkUrl, sha256: $sha256, publishedAt: $publishedAt}' \
+            > latest.json
+          echo "$SHA  $APK" > "$APK.sha256"
+          cat latest.json
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Guardar APK como artefato do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: RainhaCarmesim-${{ steps.ver.outputs.version }}
+          path: |
+            ${{ steps.pkg.outputs.apk }}
+            latest.json
+
+      - name: Publicar no GitHub Releases
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" \
+            "${{ steps.pkg.outputs.apk }}" \
+            "${{ steps.pkg.outputs.apk }}.sha256" \
+            latest.json \
+            --repo "$REPO" \
+            --target "$GITHUB_SHA" \
+            --title "Rainha Carmesim ${{ steps.ver.outputs.version }}" \
+            --notes-file release-notes.txt \
+            --latest
