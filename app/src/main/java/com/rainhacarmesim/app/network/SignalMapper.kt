@@ -43,11 +43,11 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
         val onWifi: Boolean = true,
         val steps: Int = 0,
         val distanceM: Float = 0f,
-        val stepLengthM: Float = DEFAULT_STEP_M,
     )
 
     companion object {
-        const val DEFAULT_STEP_M = 0.7f
+        /** Comprimento médio de um passo de adulto, em metros. */
+        private const val STEP_M = 0.7f
         private const val RSSI_INTERVAL_MS = 700L
         /** Uma leitura de RSSI vale para os passos dados até este tempo depois dela. */
         private const val RSSI_FRESH_MS = 2_500L
@@ -76,7 +76,6 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
     private var y = 0f
     private var steps = 0
     private var distance = 0f
-    private var stepLength = DEFAULT_STEP_M
 
     private val rotation = FloatArray(9)
     private var headX = 0f
@@ -133,11 +132,6 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
         publish()
     }
 
-    fun setStepLength(meters: Float) {
-        stepLength = meters
-        publish()
-    }
-
     /** Correção manual: o usuário indica no mapa onde está de verdade. */
     fun moveTo(nx: Float, ny: Float) {
         x = nx; y = ny
@@ -167,10 +161,10 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
     private fun onStep() {
         if (headingRad.isNaN()) return
         val rel = headingRad - heading0
-        x += stepLength * sin(rel)
-        y += stepLength * cos(rel)
+        x += STEP_M * sin(rel)
+        y += STEP_M * cos(rel)
         steps++
-        distance += stepLength
+        distance += STEP_M
         segments.last().add(MapPoint(x, y))
         recordIfFresh()
         publish()
@@ -202,7 +196,6 @@ class SignalMapper(context: Context, private val networkInfo: NetworkInfoProvide
             onWifi = onWifi,
             steps = steps,
             distanceM = distance,
-            stepLengthM = stepLength,
         )
     }
 }

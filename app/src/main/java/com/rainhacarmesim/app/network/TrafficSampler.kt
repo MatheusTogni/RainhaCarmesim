@@ -15,7 +15,12 @@ data class TrafficDelta(val rxBytes: Long, val txBytes: Long, val timestamp: Lon
  * Lê os contadores do sistema ([TrafficStats]). Não enxerga o tráfego de outros aparelhos da rede:
  * o Android só expõe os contadores do próprio dispositivo.
  */
-class TrafficSampler(private val historySize: Int = 60) {
+class TrafficSampler(private val historySize: Int = HISTORY_SIZE) {
+    companion object {
+        /** Amostras (uma por segundo) mantidas para o gráfico ao vivo. */
+        const val HISTORY_SIZE = 60
+    }
+
     private var lastRx = -1L
     private var lastTx = -1L
     private var lastAt = 0L

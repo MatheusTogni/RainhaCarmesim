@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rainhacarmesim.app.domain.Formatters
+import com.rainhacarmesim.app.network.TrafficSampler
 import com.rainhacarmesim.app.ui.appViewModel
 import com.rainhacarmesim.app.ui.components.BarChart
 import com.rainhacarmesim.app.ui.components.ChartLegend
@@ -88,7 +89,12 @@ fun MonitorScreen() {
                         ChartSeries("download", RcColors.Crimson, live.map { (it.rxBytesPerSec * 8 / 1e6).toFloat() }),
                         ChartSeries("upload", RcColors.Upload, live.map { (it.txBytesPerSec * 8 / 1e6).toFloat() }),
                     )
-                    LineChart(series, maxLabel = { "${Formatters.number(it.toDouble())} Mbps" })
+                    LineChart(
+                        series,
+                        maxLabel = { "${Formatters.number(it.toDouble())} Mbps" },
+                        capacity = TrafficSampler.HISTORY_SIZE,
+                        scrollKey = live.last().timestamp,
+                    )
                     Spacer(Modifier.height(6.dp))
                     ChartLegend(series)
                     Text("Últimos ${live.size} segundos", style = MaterialTheme.typography.labelSmall, color = RcColors.TextFaint)

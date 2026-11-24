@@ -31,8 +31,6 @@ import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -99,13 +97,10 @@ class SignalMapViewModel(c: AppContainer) : ViewModel() {
     fun start() = mapper.start(viewModelScope)
     fun stop() = mapper.stop()
     fun clear() = mapper.clear()
-    fun setStepLength(m: Float) = mapper.setStepLength(m)
     fun moveTo(p: MapPoint) = mapper.moveTo(p.x, p.y)
 
     override fun onCleared() = mapper.stop()
 }
-
-private val stepOptions = listOf("Curto" to 0.6f, "Médio" to SignalMapper.DEFAULT_STEP_M, "Longo" to 0.8f)
 
 @Composable
 fun SignalMapScreen(onBack: () -> Unit) {
@@ -187,22 +182,6 @@ fun SignalMapScreen(onBack: () -> Unit) {
                         icon = Icons.Rounded.Warning,
                         color = RcColors.Warning,
                     )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("Tamanho do passo", style = MaterialTheme.typography.labelMedium, color = RcColors.TextDim)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    stepOptions.forEach { (label, meters) ->
-                        FilterChip(
-                            selected = state.stepLengthM == meters,
-                            onClick = { vm.setStepLength(meters) },
-                            label = { Text("$label (${Formatters.number(meters.toDouble(), 1)} m)") },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = RcColors.Bordeaux,
-                                selectedLabelColor = RcColors.Text,
-                            ),
-                        )
-                    }
                 }
             }
         }

@@ -57,9 +57,9 @@ class SignalGrid(private val cellSize: Float = 0.5f) {
 
 object SignalHeatmap {
     /** Além desta distância (m) de qualquer medição, o mapa fica transparente: não há dado. */
-    const val MAX_RADIUS_M = 3f
+    const val MAX_RADIUS_M = 2f
     /** Até esta distância (m) a cor é opaca; depois esmaece até [MAX_RADIUS_M]. */
-    private const val SOLID_RADIUS_M = 1f
+    private const val SOLID_RADIUS_M = 0.6f
 
     /** Escala de cores: do sinal fraco (vermelho) ao excelente (verde). */
     const val SCALE_MIN_DBM = -90f

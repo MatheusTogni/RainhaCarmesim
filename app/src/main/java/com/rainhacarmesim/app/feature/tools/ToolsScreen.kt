@@ -215,13 +215,6 @@ private fun SpeedTestCard(vm: ToolsViewModel, state: SpeedUiState) {
     var confirmMobile by rememberSaveable { mutableStateOf(false) }
 
     RcCard(title = "Teste de velocidade", icon = Icons.Rounded.Speed) {
-        Notice(
-            "O teste usa a internet (servidor ${SpeedTestClient.SERVER}, via HTTPS) e pode transferir " +
-                "centenas de MB. Em dados móveis, isso consome sua franquia.",
-            icon = Icons.Rounded.Warning,
-            color = RcColors.Warning,
-        )
-        Spacer(Modifier.height(12.dp))
 
         when (state) {
             is SpeedUiState.Running -> {

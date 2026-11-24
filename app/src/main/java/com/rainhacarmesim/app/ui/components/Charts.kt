@@ -1,5 +1,6 @@
 package com.rainhacarmesim.app.ui.components
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +34,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,6 +63,10 @@ fun ChartLegend(series: List<ChartSeries>, modifier: Modifier = Modifier) {
  * Modo ao vivo ([capacity] informado): o eixo horizontal é fixo em [capacity] pontos, então a
  * linha cresce da esquerda para a direita sem reescalar o que já foi desenhado. A ponta avança
  * de forma contínua até o ponto mais novo em [revealMillis] e a escala vertical é animada.
+ *
+ * Modo rolagem ([capacity] + [scrollKey]): janela deslizante dos últimos [capacity] pontos. A cada
+ * mudança de [scrollKey] (um ponto novo), o gráfico desliza um passo para a esquerda em
+ * [scrollMillis], com o ponto novo entrando pela direita, em vez de pular.
  */
 @Composable
 fun LineChart(
@@ -67,7 +75,15 @@ fun LineChart(
     maxLabel: ((Float) -> String)? = null,
     capacity: Int? = null,
     revealMillis: Int = 100,
+    scrollKey: Any? = null,
+    scrollMillis: Int = 1_000,
 ) {
+    val scrolling = capacity != null && scrollKey != null
+    // Criado já em 1 na composição do ponto novo (sem um quadro "pulado") e animado até 0.
+    val shift = remember(scrollKey) { Animatable(if (scrolling) 1f else 0f) }
+    if (scrolling) {
+        LaunchedEffect(scrollKey) { shift.animateTo(0f, tween(scrollMillis, easing = LinearEasing)) }
+    }
     val maxValue = series.flatMap { it.values }.maxOrNull()?.takeIf { it > 0f } ?: 1f
     val targetScale = maxValue * 1.15f
     val scaleMax = if (capacity != null) {
@@ -78,7 +94,7 @@ fun LineChart(
     // Quantos pontos de cada série já estão visíveis (fracionário: a ponta é interpolada).
     val revealed = series.map { s ->
         key(s.label) {
-            if (capacity != null) {
+            if (capacity != null && !scrolling) {
                 animateFloatAsState(
                     (s.values.size - 1).coerceAtLeast(0).toFloat(),
                     tween(revealMillis, easing = LinearEasing),
@@ -102,22 +118,32 @@ fun LineChart(
                 val y = h * i / 3f
                 drawLine(RcColors.Outline, Offset(0f, y), Offset(w, y), strokeWidth = 1f, pathEffect = dash)
             }
-            series.forEachIndexed { si, s ->
+            clipRect { series.forEachIndexed { si, s ->
                 val n = s.values.size
                 if (n < 2) return@forEachIndexed
-                val slots = (capacity ?: n).coerceAtLeast(n)
-                val step = w / (slots - 1)
                 fun y(v: Float) = h - (v / scaleMax).coerceIn(0f, 1f) * h
 
-                // Pontos visíveis: inteiros até a parte inteira de "revealed" + ponta interpolada.
-                val r = revealed[si].coerceIn(0f, (n - 1).toFloat())
-                val whole = r.toInt()
-                val pts = ArrayList<Offset>(whole + 2)
-                for (i in 0..whole) pts += Offset(i * step, y(s.values[i]))
-                val frac = r - whole
-                if (frac > 0f && whole + 1 < n) {
-                    val v = s.values[whole] + (s.values[whole + 1] - s.values[whole]) * frac
-                    pts += Offset((whole + frac) * step, y(v))
+                val pts: List<Offset>
+                if (scrolling) {
+                    // Alinhado à direita: o ponto mais novo fica na borda (e um passo além dela
+                    // logo que chega); o mais antigo sai pela esquerda.
+                    val step = w / ((capacity ?: n).coerceAtLeast(3) - 2)
+                    val sh = shift.value
+                    pts = List(n) { i -> Offset(w - (n - 1 - i - sh) * step, y(s.values[i])) }
+                } else {
+                    val slots = (capacity ?: n).coerceAtLeast(n)
+                    val step = w / (slots - 1)
+                    // Pontos visíveis: inteiros até a parte inteira de "revealed" + ponta interpolada.
+                    val r = revealed[si].coerceIn(0f, (n - 1).toFloat())
+                    val whole = r.toInt()
+                    val list = ArrayList<Offset>(whole + 2)
+                    for (i in 0..whole) list += Offset(i * step, y(s.values[i]))
+                    val frac = r - whole
+                    if (frac > 0f && whole + 1 < n) {
+                        val v = s.values[whole] + (s.values[whole + 1] - s.values[whole]) * frac
+                        list += Offset((whole + frac) * step, y(v))
+                    }
+                    pts = list
                 }
                 if (pts.size < 2) return@forEachIndexed
 
@@ -130,8 +156,8 @@ fun LineChart(
                 }
                 drawPath(fill, Brush.verticalGradient(listOf(s.color.copy(alpha = 0.28f), Color.Transparent)))
                 drawPath(line, s.color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
-                if (capacity != null) drawCircle(s.color, 3.5.dp.toPx(), pts.last())
-            }
+                if (capacity != null && !scrolling) drawCircle(s.color, 3.5.dp.toPx(), pts.last())
+            } }
         }
     }
 }
