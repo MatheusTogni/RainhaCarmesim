@@ -20,7 +20,7 @@ object ArpTable {
         val file = File("/proc/net/arp")
         if (!file.canRead()) return emptyMap()
         return file.readLines().drop(1).mapNotNull { line ->
-            val cols = line.trim().split(Regex("\s+"))
+            val cols = line.trim().split(Regex("""\s+"""))
             if (cols.size < 4) return@mapNotNull null
             normalize(cols[3])?.let { cols[0] to it }
         }.toMap()
@@ -31,7 +31,7 @@ object ArpTable {
         val output = process.inputStream.bufferedReader().use { it.readText() }
         process.waitFor()
         return output.lines().mapNotNull { line ->
-            val cols = line.trim().split(Regex("\s+"))
+            val cols = line.trim().split(Regex("""\s+"""))
             val idx = cols.indexOf("lladdr")
             if (idx < 0 || idx + 1 >= cols.size) return@mapNotNull null
             normalize(cols[idx + 1])?.let { cols[0] to it }
