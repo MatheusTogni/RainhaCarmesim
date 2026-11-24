@@ -25,7 +25,7 @@
 
 **📈 Monitor de tráfego.** Gráfico ao vivo de download e upload do celular e histórico de consumo de 24 h, 7 dias e 30 dias.
 
-**🛠️ Ferramentas.** Ping com latência e perda de pacotes, e teste de velocidade real (download, upload, latência e jitter) com gauge e histórico.
+**🛠️ Ferramentas.** Ping com latência e perda de pacotes, teste de velocidade real (download, upload, latência e jitter) com gauge e histórico, e mapa de sinal Wi‑Fi: ande pelo local e veja, num mapa de calor em dBm, onde o sinal é forte ou fraco.
 
 **🔔 Alertas.** Avisa quando entra um dispositivo novo na rede, quando um conhecido volta ou quando algum se desconecta, enquanto o app está aberto.
 
@@ -44,7 +44,7 @@
 
 1. Baixe o `RainhaCarmesim-X.Y.Z.apk` na [última release](https://github.com/MatheusTogni/RainhaCarmesim/releases/latest).
 2. Abra o arquivo no celular e autorize a instalação de apps desta fonte, se o Android pedir.
-3. As próximas versões podem ser instaladas pelo próprio app, em **Settings › Verificar atualizações**.
+3. As próximas versões podem ser instaladas pelo próprio app, em **Ajustes › Verificar atualizações**.
 
 ## Feito com
 

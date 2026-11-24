@@ -229,7 +229,6 @@ private fun ConnectionCard(
     RcCard(
         title = "Conexão",
         icon = if (snap.connected) Icons.Rounded.Wifi else Icons.Rounded.WifiOff,
-        accent = color,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             StatusDot(color, pulsing = snap.connected)

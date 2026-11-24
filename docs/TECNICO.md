@@ -35,6 +35,7 @@ Stack:
 - **Speed test.** Usa `speed.cloudflare.com` via HTTPS:
   - latência: mediana de 10 requisições vazias, com jitter;
   - download e upload: 4 conexões paralelas por até 10 s, com teto de 250 MB e 120 MB, descartando o 1º segundo.
+- **Mapa de sinal Wi-Fi** (`SignalMapper` + `domain/SignalHeatmap`). Lê o RSSI do Wi-Fi conectado a cada 0,7 s, sem exigir permissão. A posição é estimada a partir do ponto de partida: os passos vêm do acelerômetro, por detecção de picos, sem a permissão de atividade física, e a direção vem do `GAME_ROTATION_VECTOR`, que ignora o magnetômetro, distorcido dentro de casa. As leituras são agrupadas por célula de 0,5 m. O mapa de calor é interpolado por inverso da distância (IDW) num raio de 3 m. Fica só em memória e é apagado ao fechar a tela.
 - **Alertas.** Com o app em primeiro plano (`repeatOnLifecycle(STARTED)`), uma varredura automática roda no intervalo configurado. As transições geram alertas no Room, com cooldown de 10 min por dispositivo e tipo.
 
 ## Sistema de atualização
@@ -73,6 +74,7 @@ O app não usa notificações do sistema, serviços em segundo plano nem WorkMan
 - **Tráfego de outros dispositivos** não é visível: o Android só expõe os contadores do próprio aparelho.
 - **Histórico de dados**: sem "Acesso de uso", cobre só os períodos com o app aberto.
 - **Speed test**: depende do serviço público da Cloudflare, consome dados (até cerca de 370 MB por teste) e mede a vazão até esse servidor.
+- **Mapa de sinal**: a posição por passos desvia com o tempo, então o usuário pode tocar no mapa para corrigi-la. O mapa mede só a rede conectada. O RSSI informado pelo Android pode levar alguns segundos para atualizar.
 - **SSID**: requer permissão de localização e a localização do aparelho ativada.
 - **Identificação da rede**: dispositivos conhecidos são agrupados por sub-rede e gateway, então duas redes com o mesmo endereçamento compartilham a lista.
 - **Alertas** só existem com o app aberto. É uma escolha de projeto: não há monitoramento em segundo plano.

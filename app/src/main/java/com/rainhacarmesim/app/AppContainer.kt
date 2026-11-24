@@ -12,6 +12,7 @@ import com.rainhacarmesim.app.network.HostProbe
 import com.rainhacarmesim.app.network.HostnameResolver
 import com.rainhacarmesim.app.network.NetworkInfoProvider
 import com.rainhacarmesim.app.network.PingRunner
+import com.rainhacarmesim.app.network.SignalMapper
 import com.rainhacarmesim.app.network.SpeedTestClient
 import com.rainhacarmesim.app.network.SystemUsageHistory
 import com.rainhacarmesim.app.network.TrafficSampler
@@ -46,6 +47,9 @@ class AppContainer(context: Context) {
 
     val pingRunner = PingRunner()
     val speedTestClient = SpeedTestClient(userAgent)
+
+    /** Cada tela de mapa de sinal tem o seu mapeador (sensores ligados só enquanto ela está aberta). */
+    fun newSignalMapper() = SignalMapper(appContext, networkInfo)
 
     val updateManager by lazy { UpdateManager(appContext, settings, appScope) }
 }

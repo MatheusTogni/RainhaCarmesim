@@ -74,7 +74,7 @@ O app consulta `releases/latest/download/latest.json`, que sempre aponta para a 
 1. Cadastre os 4 secrets acima.
 2. Faça um push na `main` (ou rode **Actions › Build › Run workflow**) e confira se a release apareceu.
 3. Instale o APK dessa release no celular.
-4. Para testar o atualizador, faça outro push. Depois, no app, vá em **Settings › Verificar atualizações**.
+4. Para testar o atualizador, faça outro push. Depois, no app, vá em **Ajustes › Verificar atualizações**.
 
 ## Cuidados
 

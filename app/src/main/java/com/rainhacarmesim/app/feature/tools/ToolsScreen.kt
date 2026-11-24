@@ -1,5 +1,8 @@
 package com.rainhacarmesim.app.feature.tools
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Speed
@@ -42,6 +46,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,7 +71,7 @@ import com.rainhacarmesim.app.ui.theme.RcColors
 import kotlin.math.log10
 
 @Composable
-fun ToolsScreen(initialTarget: String?) {
+fun ToolsScreen(initialTarget: String?, onOpenSignalMap: () -> Unit) {
     val vm = appViewModel { ToolsViewModel(it) }
     val ping by vm.ping.collectAsStateWithLifecycle()
     val speed by vm.speed.collectAsStateWithLifecycle()
@@ -77,9 +82,10 @@ fun ToolsScreen(initialTarget: String?) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        item { ScreenHeader("Ferramentas", "Ping e teste de velocidade") }
+        item { ScreenHeader("Ferramentas", "Ping, velocidade e mapa de sinal") }
         item { PingCard(vm, ping, initialTarget) }
         item { SpeedTestCard(vm, speed) }
+        item { SignalMapEntryCard(onOpenSignalMap) }
         if (history.isNotEmpty()) {
             item { SpeedHistoryCard(history) }
         }
@@ -225,10 +231,15 @@ private fun SpeedTestCard(vm: ToolsViewModel, state: SpeedUiState) {
                     SpeedTestClient.Stage.UPLOAD -> "Upload" to RcColors.Upload
                     SpeedTestClient.Stage.DONE -> "Concluindo…" to RcColors.Crimson
                 }
-                val mbps = state.currentMbps ?: 0.0
+                // Valor e ponteiro animados entre as amostras, para o medidor deslizar em vez de pular.
+                val mbps by animateFloatAsState(
+                    (state.currentMbps ?: 0.0).toFloat(),
+                    tween(350, easing = FastOutSlowInEasing),
+                    label = "mbps",
+                )
                 Gauge(
-                    fraction = gaugeFraction(mbps),
-                    valueText = if (state.currentMbps == null) "—" else Formatters.mbps(mbps),
+                    fraction = gaugeFraction(mbps.toDouble()),
+                    valueText = if (state.currentMbps == null) "—" else Formatters.mbps(mbps.toDouble()),
                     unitText = "Mbps",
                     caption = caption,
                     color = color,
@@ -238,7 +249,12 @@ private fun SpeedTestCard(vm: ToolsViewModel, state: SpeedUiState) {
                         if (state.downloadSeries.size >= 2) add(ChartSeries("download", RcColors.Crimson, state.downloadSeries))
                         if (state.uploadSeries.size >= 2) add(ChartSeries("upload", RcColors.Upload, state.uploadSeries))
                     }
-                    LineChart(series, maxLabel = { "${Formatters.number(it.toDouble())} Mbps" })
+                    LineChart(
+                        series,
+                        maxLabel = { "${Formatters.number(it.toDouble())} Mbps" },
+                        capacity = SpeedTestClient.SAMPLES_PER_STAGE,
+                        revealMillis = SpeedTestClient.REPORT_INTERVAL_MS.toInt(),
+                    )
                     ChartLegend(series)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -298,6 +314,27 @@ private fun SpeedTestCard(vm: ToolsViewModel, state: SpeedUiState) {
             dismissButton = { TextButton(onClick = { confirmMobile = false }) { Text("Cancelar") } },
             containerColor = RcColors.Surface,
         )
+    }
+}
+
+@Composable
+private fun SignalMapEntryCard(onOpen: () -> Unit) {
+    RcCard(title = "Mapa de sinal Wi-Fi", icon = Icons.Rounded.Map) {
+        Text(
+            "Ande pela casa ou escritório e veja, num mapa de calor, onde o sinal do Wi-Fi é forte ou fraco (em dBm).",
+            style = MaterialTheme.typography.bodyMedium,
+            color = RcColors.TextDim,
+        )
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onOpen,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = RcColors.Crimson, contentColor = Color.White),
+        ) {
+            Icon(Icons.Rounded.Map, null)
+            Spacer(Modifier.width(6.dp))
+            Text("Abrir mapa de sinal")
+        }
     }
 }
 

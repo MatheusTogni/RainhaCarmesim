@@ -201,6 +201,21 @@ class NetworkInfoProvider(private val context: Context) {
         )
     }
 
+    /**
+     * RSSI (dBm) atual do Wi-Fi conectado, ou null se não estiver no Wi-Fi.
+     * Não exige permissão de localização: só o SSID/BSSID são ocultados sem ela.
+     */
+    @Suppress("DEPRECATION")
+    fun currentWifiRssi(): Int? {
+        val network = cm.activeNetwork ?: return null
+        val caps = cm.getNetworkCapabilities(network) ?: return null
+        if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
+        // O WifiManager é atualizado com mais frequência que o WifiInfo das capacidades.
+        val legacy = runCatching { wifi?.connectionInfo?.rssi }.getOrNull()
+        val fromCaps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) (caps.transportInfo as? WifiInfo)?.rssi else null
+        return listOfNotNull(legacy, fromCaps).firstOrNull { it in -126..-1 }
+    }
+
     private fun hasRealSsid(info: WifiInfo): Boolean {
         val ssid = info.ssid?.removeSurrounding("\"") ?: return false
         return ssid.isNotBlank() && ssid != "<unknown ssid>"

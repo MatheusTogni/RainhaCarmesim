@@ -9,6 +9,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -25,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -40,6 +42,7 @@ import com.rainhacarmesim.app.feature.dashboard.DashboardScreen
 import com.rainhacarmesim.app.feature.devices.DevicesScreen
 import com.rainhacarmesim.app.feature.monitor.MonitorScreen
 import com.rainhacarmesim.app.feature.settings.SettingsScreen
+import com.rainhacarmesim.app.feature.tools.SignalMapScreen
 import com.rainhacarmesim.app.feature.tools.ToolsScreen
 import com.rainhacarmesim.app.ui.appContainer
 import com.rainhacarmesim.app.ui.theme.RcColors
@@ -52,6 +55,7 @@ private object Routes {
     const val TOOLS = "tools"
     const val SETTINGS = "settings"
     const val ALERTS = "alerts"
+    const val SIGNAL_MAP = "signal-map"
 
     fun devices(focus: String? = null) = if (focus == null) DEVICES else "$DEVICES?focus=${Uri.encode(focus)}"
     fun tools(target: String? = null) = if (target == null) TOOLS else "$TOOLS?target=${Uri.encode(target)}"
@@ -60,11 +64,11 @@ private object Routes {
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab(Routes.HOME, "Home", Icons.Rounded.Home),
-    Tab(Routes.DEVICES, "Devices", Icons.Rounded.Devices),
+    Tab(Routes.HOME, "Início", Icons.Rounded.Home),
+    Tab(Routes.DEVICES, "Dispositivos", Icons.Rounded.Devices),
     Tab(Routes.MONITOR, "Monitor", Icons.Rounded.ShowChart),
-    Tab(Routes.TOOLS, "Tools", Icons.Rounded.Build),
-    Tab(Routes.SETTINGS, "Settings", Icons.Rounded.Settings),
+    Tab(Routes.TOOLS, "Ferramentas", Icons.Rounded.Build),
+    Tab(Routes.SETTINGS, "Ajustes", Icons.Rounded.Settings),
 )
 
 private fun NavHostController.goToTab(route: String) {
@@ -110,12 +114,22 @@ fun RainhaRoot() {
         bottomBar = {
             NavigationBar(containerColor = RcColors.Surface, tonalElevation = 0.dp) {
                 tabs.forEach { tab ->
-                    val selected = currentRoute == tab.route || (tab.route == Routes.HOME && currentRoute == Routes.ALERTS)
+                    val selected = currentRoute == tab.route ||
+                        (tab.route == Routes.HOME && currentRoute == Routes.ALERTS) ||
+                        (tab.route == Routes.TOOLS && currentRoute == Routes.SIGNAL_MAP)
                     NavigationBarItem(
                         selected = selected,
                         onClick = { nav.goToTab(tab.route) },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
+                        label = {
+                            Text(
+                                tab.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Visible,
+                            )
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = RcColors.Text,
                             selectedTextColor = RcColors.Crimson,
@@ -155,8 +169,12 @@ fun RainhaRoot() {
                 route = "${Routes.TOOLS}?target={target}",
                 arguments = listOf(navArgument("target") { type = NavType.StringType; nullable = true; defaultValue = null }),
             ) { entry ->
-                ToolsScreen(initialTarget = entry.arguments?.getString("target"))
+                ToolsScreen(
+                    initialTarget = entry.arguments?.getString("target"),
+                    onOpenSignalMap = { nav.navigate(Routes.SIGNAL_MAP) { launchSingleTop = true } },
+                )
             }
+            composable(Routes.SIGNAL_MAP) { SignalMapScreen(onBack = { nav.popBackStack() }) }
             composable(Routes.SETTINGS) {
                 SettingsScreen(showMessage = { msg -> scope.launch { snackbar.showSnackbar(msg) } })
             }

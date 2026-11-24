@@ -1,5 +1,9 @@
 package com.rainhacarmesim.app.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +19,7 @@ import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -50,15 +55,40 @@ fun ChartLegend(series: List<ChartSeries>, modifier: Modifier = Modifier) {
 /**
  * Gráfico de linhas com preenchimento suave. Todas as séries compartilham a escala vertical.
  * [maxLabel] recebe o valor máximo da escala e devolve o texto do topo do eixo.
+ *
+ * Modo ao vivo ([capacity] informado): o eixo horizontal é fixo em [capacity] pontos, então a
+ * linha cresce da esquerda para a direita sem reescalar o que já foi desenhado. A ponta avança
+ * de forma contínua até o ponto mais novo em [revealMillis] e a escala vertical é animada.
  */
 @Composable
 fun LineChart(
     series: List<ChartSeries>,
     modifier: Modifier = Modifier,
     maxLabel: ((Float) -> String)? = null,
+    capacity: Int? = null,
+    revealMillis: Int = 100,
 ) {
     val maxValue = series.flatMap { it.values }.maxOrNull()?.takeIf { it > 0f } ?: 1f
-    val scaleMax = maxValue * 1.15f
+    val targetScale = maxValue * 1.15f
+    val scaleMax = if (capacity != null) {
+        animateFloatAsState(targetScale, tween(450, easing = FastOutSlowInEasing), label = "scale").value
+    } else {
+        targetScale
+    }
+    // Quantos pontos de cada série já estão visíveis (fracionário: a ponta é interpolada).
+    val revealed = series.map { s ->
+        key(s.label) {
+            if (capacity != null) {
+                animateFloatAsState(
+                    (s.values.size - 1).coerceAtLeast(0).toFloat(),
+                    tween(revealMillis, easing = LinearEasing),
+                    label = "reveal",
+                ).value
+            } else {
+                (s.values.size - 1).toFloat()
+            }
+        }
+    }
     Column(modifier) {
         if (maxLabel != null) {
             Text(maxLabel(scaleMax), style = MaterialTheme.typography.labelSmall, color = RcColors.TextFaint)
@@ -72,27 +102,54 @@ fun LineChart(
                 val y = h * i / 3f
                 drawLine(RcColors.Outline, Offset(0f, y), Offset(w, y), strokeWidth = 1f, pathEffect = dash)
             }
-            series.forEach { s ->
+            series.forEachIndexed { si, s ->
                 val n = s.values.size
-                if (n < 2) return@forEach
-                val step = w / (n - 1)
-                val line = Path()
-                s.values.forEachIndexed { i, v ->
-                    val x = i * step
-                    val y = h - (v / scaleMax).coerceIn(0f, 1f) * h
-                    if (i == 0) line.moveTo(x, y) else line.lineTo(x, y)
+                if (n < 2) return@forEachIndexed
+                val slots = (capacity ?: n).coerceAtLeast(n)
+                val step = w / (slots - 1)
+                fun y(v: Float) = h - (v / scaleMax).coerceIn(0f, 1f) * h
+
+                // Pontos visíveis: inteiros até a parte inteira de "revealed" + ponta interpolada.
+                val r = revealed[si].coerceIn(0f, (n - 1).toFloat())
+                val whole = r.toInt()
+                val pts = ArrayList<Offset>(whole + 2)
+                for (i in 0..whole) pts += Offset(i * step, y(s.values[i]))
+                val frac = r - whole
+                if (frac > 0f && whole + 1 < n) {
+                    val v = s.values[whole] + (s.values[whole + 1] - s.values[whole]) * frac
+                    pts += Offset((whole + frac) * step, y(v))
                 }
+                if (pts.size < 2) return@forEachIndexed
+
+                val line = smoothPath(pts, h)
                 val fill = Path().apply {
                     addPath(line)
-                    lineTo(w, h)
-                    lineTo(0f, h)
+                    lineTo(pts.last().x, h)
+                    lineTo(pts.first().x, h)
                     close()
                 }
                 drawPath(fill, Brush.verticalGradient(listOf(s.color.copy(alpha = 0.28f), Color.Transparent)))
                 drawPath(line, s.color, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+                if (capacity != null) drawCircle(s.color, 3.5.dp.toPx(), pts.last())
             }
         }
     }
+}
+
+/** Curva suave (Catmull-Rom convertida em cúbicas) passando por todos os pontos. */
+private fun smoothPath(p: List<Offset>, maxY: Float): Path {
+    val path = Path()
+    path.moveTo(p[0].x, p[0].y)
+    for (i in 0 until p.size - 1) {
+        val p0 = p[if (i > 0) i - 1 else i]
+        val p1 = p[i]
+        val p2 = p[i + 1]
+        val p3 = p[if (i + 2 < p.size) i + 2 else i + 1]
+        val c1y = (p1.y + (p2.y - p0.y) / 6f).coerceIn(0f, maxY)
+        val c2y = (p2.y - (p3.y - p1.y) / 6f).coerceIn(0f, maxY)
+        path.cubicTo(p1.x + (p2.x - p0.x) / 6f, c1y, p2.x - (p3.x - p1.x) / 6f, c2y, p2.x, p2.y)
+    }
+    return path
 }
 
 /** Gráfico de barras agrupadas (ex.: download/upload por período). */

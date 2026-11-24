@@ -32,6 +32,12 @@ class SpeedTestClient(private val userAgent: String) {
         private const val MAX_DOWNLOAD_BYTES = 250L * 1024 * 1024
         private const val MAX_UPLOAD_BYTES = 120L * 1024 * 1024
         private const val CONNECTIONS = 4
+        /** Intervalo entre atualizações de progresso (o gráfico ao vivo tem um ponto por intervalo). */
+        const val REPORT_INTERVAL_MS = 100L
+        /** Janela da média móvel da velocidade exibida durante o teste. */
+        private const val SMOOTH_WINDOW_MS = 1_000L
+        /** Quantidade máxima de pontos por etapa (download ou upload) no gráfico ao vivo. */
+        const val SAMPLES_PER_STAGE = (TEST_DURATION_MS / REPORT_INTERVAL_MS).toInt()
     }
 
     enum class Stage { LATENCY, DOWNLOAD, UPLOAD, DONE }
@@ -125,20 +131,22 @@ class SpeedTestClient(private val userAgent: String) {
         var warmupBytes = 0L
         var warmupAt = -1L
         val reporter = launch {
-            var lastBytes = 0L
-            var lastTime = System.nanoTime()
+            // Média móvel sobre a última janela: evita o "serrilhado" da vazão instantânea.
+            val window = ArrayDeque<Pair<Long, Long>>() // (instante ns, bytes acumulados)
+            window.addLast(System.nanoTime() to 0L)
             while (isActive && !stop()) {
-                delay(250)
+                delay(REPORT_INTERVAL_MS)
                 val now = System.nanoTime()
                 val bytes = counter.get()
-                val instant = (bytes - lastBytes) * 8.0 / ((now - lastTime) / 1e9) / 1e6
-                lastBytes = bytes
-                lastTime = now
+                window.addLast(now to bytes)
+                while (window.size > 2 && now - window[1].first >= SMOOTH_WINDOW_MS * 1_000_000) window.removeFirst()
+                val (t0, b0) = window.first()
+                val smoothed = if (now > t0) (bytes - b0) * 8.0 / ((now - t0) / 1e9) / 1e6 else 0.0
                 if (warmupAt < 0 && elapsedMs() >= WARMUP_MS) {
                     warmupAt = elapsedMs()
                     warmupBytes = bytes
                 }
-                onProgress(Progress(stage, instant, (elapsedMs().toFloat() / TEST_DURATION_MS).coerceIn(0f, 1f)))
+                onProgress(Progress(stage, smoothed, (elapsedMs().toFloat() / TEST_DURATION_MS).coerceIn(0f, 1f)))
             }
         }
         workers.awaitAll()
