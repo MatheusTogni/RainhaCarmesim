@@ -1,5 +1,8 @@
 name: Build
 
+# Push na main: testa, compila o APK assinado e publica uma release no GitHub Releases
+# (APK + .sha256 + latest.json lido pelo atualizador do app).
+# Pull request: só testa e compila (sem release).
 on:
   push:
     branches: [main]
@@ -7,13 +10,38 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PUBLICAR: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Definir versão
+        id: ver
+        env:
+          RUN: ${{ github.run_number }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          # versionCode = 10000 + run  ->  versionName 1.Y.Z, com Y*100 + Z = run
+          # (mesmo esquema X*10000 + Y*100 + Z usado pelo app).
+          CODE=$((10000 + RUN))
+          VERSION="1.$((RUN / 100)).$((RUN % 100))"
+          NOTES="${COMMIT_MESSAGE:-$(git log -1 --format=%B)}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          printf '%s' "$NOTES" > release-notes.txt
+          echo "Versão $VERSION (versionCode $CODE)"
 
       - name: Validar Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
@@ -25,25 +53,34 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Preparar chave de assinatura (se configurada)
+      - name: Preparar chave de assinatura
         env:
           RC_KEYSTORE_BASE64: ${{ secrets.RC_KEYSTORE_BASE64 }}
           RC_KEYSTORE_PASSWORD: ${{ secrets.RC_KEYSTORE_PASSWORD }}
           RC_KEY_ALIAS: ${{ secrets.RC_KEY_ALIAS }}
           RC_KEY_PASSWORD: ${{ secrets.RC_KEY_PASSWORD }}
         run: |
-          if [ -n "$RC_KEYSTORE_BASE64" ]; then
-            echo "$RC_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
-            {
-              echo "RC_KEYSTORE_PATH=$RUNNER_TEMP/release.p12"
-              echo "RC_KEYSTORE_PASSWORD=$RC_KEYSTORE_PASSWORD"
-              echo "RC_KEY_ALIAS=$RC_KEY_ALIAS"
-              echo "RC_KEY_PASSWORD=$RC_KEY_PASSWORD"
-            } >> "$GITHUB_ENV"
-            echo "Chave de release configurada."
-          else
+          FALTANDO=""
+          for v in RC_KEYSTORE_BASE64 RC_KEYSTORE_PASSWORD RC_KEY_ALIAS RC_KEY_PASSWORD; do
+            [ -z "${!v}" ] && FALTANDO="$FALTANDO $v"
+          done
+          if [ -n "$FALTANDO" ]; then
+            if [ "$PUBLICAR" = "true" ]; then
+              # Uma release NUNCA pode sair assinada com outra chave.
+              echo "::error::Secrets não configurados:$FALTANDO. Veja docs/RELEASING.md."
+              exit 1
+            fi
             echo "::warning::Secrets de assinatura ausentes (ex.: PR de fork). O APK deste build usa a chave de debug."
+            exit 0
           fi
+          echo "$RC_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+          {
+            echo "RC_KEYSTORE_PATH=$RUNNER_TEMP/release.p12"
+            echo "RC_KEYSTORE_PASSWORD=$RC_KEYSTORE_PASSWORD"
+            echo "RC_KEY_ALIAS=$RC_KEY_ALIAS"
+            echo "RC_KEY_PASSWORD=$RC_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+          echo "Chave de release configurada."
 
       - name: Testes unitários
         run: |
@@ -54,14 +91,64 @@ jobs:
         run: ./gradlew --no-daemon lintDebug
 
       - name: Compilar APK (release)
-        run: ./gradlew --no-daemon assembleRelease -PversionName=0.0.${{ github.run_number }} -PversionCode=${{ github.run_number }}
+        run: |
+          ./gradlew --no-daemon assembleRelease \
+            -PversionName=${{ steps.ver.outputs.version }} \
+            -PversionCode=${{ steps.ver.outputs.code }}
+
+      - name: Conferir assinatura do APK
+        if: env.PUBLICAR == 'true'
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          CERT=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | grep -m1 'certificate DN')
+          echo "$CERT"
+          if echo "$CERT" | grep -q 'CN=Android Debug'; then
+            echo "::error::APK assinado com a chave de DEBUG. Abortando a publicação."
+            exit 1
+          fi
+
+      - name: Preparar APK, SHA-256 e latest.json
+        id: pkg
+        run: |
+          VERSION=${{ steps.ver.outputs.version }}
+          TAG=${{ steps.ver.outputs.tag }}
+          APK="RainhaCarmesim-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          jq -n \
+            --arg versionName "$VERSION" \
+            --argjson versionCode ${{ steps.ver.outputs.code }} \
+            --rawfile releaseNotes release-notes.txt \
+            --arg apkUrl "https://github.com/$REPO/releases/download/$TAG/$APK" \
+            --arg sha256 "$SHA" \
+            --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{versionName: $versionName, versionCode: $versionCode, releaseNotes: $releaseNotes, apkUrl: $apkUrl, sha256: $sha256, publishedAt: $publishedAt}' \
+            > latest.json
+          echo "$SHA  $APK" > "$APK.sha256"
+          cat latest.json
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
 
       - name: Publicar APK como artefato
         uses: actions/upload-artifact@v4
         with:
-          name: RainhaCarmesim-build-${{ github.run_number }}
-          path: app/build/outputs/apk/release/*.apk
+          name: RainhaCarmesim-${{ steps.ver.outputs.version }}
+          path: |
+            ${{ steps.pkg.outputs.apk }}
+            latest.json
           retention-days: 14
+
+      - name: Publicar no GitHub Releases
+        if: env.PUBLICAR == 'true'
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" \
+            "${{ steps.pkg.outputs.apk }}" \
+            "${{ steps.pkg.outputs.apk }}.sha256" \
+            latest.json \
+            --repo "$REPO" \
+            --target "$GITHUB_SHA" \
+            --title "Rainha Carmesim ${{ steps.ver.outputs.version }}" \
+            --notes-file release-notes.txt \
+            --latest
 
       - name: Relatórios (testes e lint)
         if: always()

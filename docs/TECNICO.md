@@ -47,7 +47,7 @@ Stack:
 6. Pede a permissão "instalar apps desconhecidos" **apenas** nesse momento.
 7. Abre o instalador oficial (`PackageInstaller`, com `FileProvider` como alternativa). A confirmação é sempre do usuário e os dados são preservados.
 
-As releases são publicadas pelo workflow `release.yml`; veja [RELEASING.md](RELEASING.md).
+As releases são publicadas automaticamente pelo workflow `build.yml` a cada push na `main`; veja [RELEASING.md](RELEASING.md).
 
 ## Permissões Android
 
