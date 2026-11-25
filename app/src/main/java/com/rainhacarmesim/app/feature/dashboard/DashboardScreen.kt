@@ -9,9 +9,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -160,9 +162,13 @@ fun DashboardScreen(
                     item { AddressCard(snap) }
                 }
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    // IntrinsicSize.Min + fillMaxHeight: os dois cards sempre com a mesma altura (a do mais alto).
+                    Row(
+                        modifier = Modifier.height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
                         RcCard(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
                             title = "Dispositivos",
                             icon = Icons.Rounded.Devices,
                             onClick = onOpenDevices,
@@ -176,7 +182,7 @@ fun DashboardScreen(
                                 Text("${devices.size} conhecidos", style = MaterialTheme.typography.bodySmall, color = RcColors.TextDim)
                             }
                         }
-                        RcCard(modifier = Modifier.weight(1f), title = "Tráfego", icon = Icons.Rounded.Radar) {
+                        RcCard(modifier = Modifier.weight(1f).fillMaxHeight(), title = "Tráfego", icon = Icons.Rounded.Radar) {
                             val t = traffic
                             if (!trafficSupported) {
                                 Text("Contadores indisponíveis neste aparelho", style = MaterialTheme.typography.bodySmall, color = RcColors.TextFaint)

@@ -23,6 +23,8 @@ data class PingReplyUi(val seq: Int, val timeMs: Double?)
 
 data class PingUiState(
     val running: Boolean = false,
+    /** Pacotes pedidos nesta execução: define a largura fixa do eixo horizontal do gráfico. */
+    val count: Int = 0,
     val replies: List<PingReplyUi> = emptyList(),
     val result: PingResult? = null,
     val error: String? = null,
@@ -66,7 +68,7 @@ class ToolsViewModel(private val c: AppContainer) : ViewModel() {
             return
         }
         pingJob?.cancel()
-        _ping.value = PingUiState(running = true)
+        _ping.value = PingUiState(running = true, count = count)
         pingJob = viewModelScope.launch {
             try {
                 val result = c.pingRunner.run(target, count) { seq, time ->

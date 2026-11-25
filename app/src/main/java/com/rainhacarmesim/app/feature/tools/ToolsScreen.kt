@@ -90,6 +90,9 @@ private val ControlShape = RoundedCornerShape(14.dp)
 /** Altura mínima de toque dos botões principais. */
 private val ControlHeight = 48.dp
 
+/** Intervalo entre pacotes do ping (o PingRunner envia 1 por segundo, em ICMP e em TCP). */
+private const val PING_INTERVAL_MS = 1_000
+
 @Composable
 fun ToolsScreen(initialTarget: String?, onOpenSignalMap: () -> Unit) {
     val vm = appViewModel { ToolsViewModel(it) }
@@ -267,6 +270,10 @@ private fun PingCard(vm: ToolsViewModel, state: PingUiState, initialTarget: Stri
                 LineChart(
                     series = listOf(ChartSeries("latência", RcColors.Crimson, times)),
                     maxLabel = { "${Formatters.number(it.toDouble(), 0)} ms" },
+                    // Modo ao vivo (igual ao do teste de velocidade): eixo fixo no nº de pacotes, a ponta desliza
+                    // até cada resposta (o ping envia 1 por segundo) e a escala vertical é animada.
+                    capacity = state.count.coerceAtLeast(2),
+                    revealMillis = PING_INTERVAL_MS,
                 )
                 Spacer(Modifier.height(8.dp))
             }
